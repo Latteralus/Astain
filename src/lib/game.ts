@@ -49,7 +49,7 @@ export function workerOutput(game: GameState, employee: Employee) {
   if (!spec) return undefined
   return {
     bfPerHour: hourlyOutput(spec.maxBfPerHour, employee.speed),
-    waste: wastePercentage(spec.baseError, employee.quality),
+    waste: wastePercentage(employee.level, spec.wasteFactor),
   }
 }
 

@@ -81,6 +81,53 @@ Circular imports exist (`simulation` ↔ `market`, `simulation` ↔ `fleet`). Th
 
 ## Log
 
+### 2026-09-21: Waste capped at 10%, set by level
+
+**Change (requested: no finisher keeps a job wasting 30%)**
+- `wastePercentage(level, machineWasteFactor)` is now 10% at level 1, falling linearly to 5% at level 50 and flat after that, times the station's `wasteFactor`: brush bench 1.0, dip tank 0.8, spray booth 0.6. That replaces `baseError`.
+  - Nothing ever wastes more than 10%.
+  - The best case is a level-50 worker on a spray booth, at 3%.
+  - Technical.md §4 is updated to match.
+- **Leveling is 10× faster:** `BASE_XP` went from 600 to 60, keeping the doc's `Base × Level^1.5` shape. A full-time worker reaches level 10 in ~9 working days, level 25 in ~100 and level 50 in ~575.
+  - At the old pace level 50 took ~5,700 days, so the waste curve would never have moved.
+  - The user picked "speed up XP" over keeping the curve.
+  - Exactly one year to level 50 would need a different exponent, and I kept the documented one.
+- **Stat gain per level cut** from 12% to 5% of the gap to 100, so speed after ~100 days (~83 from a start of 45) matches the old pacing instead of maxing out by level 25.
+- **Contract rates reverted** to toll $0.55–0.80 and purchase premium $0.85–1.25. The Phase 6 hike existed only to offset ~30% waste.
+
+**Sim (5 seeds, all 10 pass)**
+- steady: equity $80k (was $68k)
+- steady + fleet: $68k (the fleet gap narrowed to ~$12k)
+- over-hire + lull: bankrupt on day 11
+- over-hire + cut: bankrupt on day 21–23
+- over-hire + busy: $109k
+- idle: bankrupt on day 145
+
+**Open question: the Quality stat no longer does anything but raise the wage.** `dailyWage` still charges for it, and candidates still roll it, so high-quality applicants are now strictly worse value. Options:
+- Drop it from the wage.
+- Let it set a hire's starting level (agency hires start experienced).
+- Remove the stat.
+
+The user asked for level plus machine only, so this is waiting on their call.
+
+### 2026-09-21: Empty start and dark mode
+
+- **New companies start with no lumber and no staff.** The yard still comes with a brush bench and two drying racks.
+  - The first hire (Staff → Job market) and the first lumber order are now the player's job.
+  - Nightly overhead with nobody hired is $350 (rent, utilities, insurance).
+  - Only new careers change. Existing saves keep what they have.
+  - The starting hand, Dale Whitaker, is gone from `NEW_GAME` in `dbManager.ts`.
+- **Dark mode is the default.**
+  - `src/lib/theme.ts` toggles the `.dark` class on `<html>` and stores the choice in `localStorage` under `astain.theme`, which Electron keeps in userData.
+  - `index.html` ships with `class="dark"`, and the window's `backgroundColor` is `#0a0a0a`, so there's no white flash at start-up.
+  - `color-scheme` is set for each theme, so native scrollbars and `<select>` menus match.
+  - The toggle is in the sidebar footer and in the top right of the title menu.
+  - The renderer only uses theme tokens (no hard-coded colors), so the existing `.dark` palette in `index.css` covers everything. Keep it that way.
+- **Sim scenarios updated for the empty start.**
+  - The scenarios now hire their own staff: starter hires 1, steady 2, over-expansion 4.
+  - The idle scenario runs 200 days.
+  - Results: idle goes bankrupt on day 145 (it was 94). Steady ends at $68k equity and over-hire into a lull still goes bankrupt on day 11. All 10 scenarios pass.
+
 ### 2026-09-21: Phase 6, Balancing & Polish
 
 **What was built**

@@ -156,6 +156,8 @@ function createWindow() {
     minWidth: 1024,
     minHeight: 700,
     title: 'AStain',
+    // Matches the dark theme's background, so the window doesn't flash white while the page loads.
+    backgroundColor: '#0a0a0a',
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       contextIsolation: true,

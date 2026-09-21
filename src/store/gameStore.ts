@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { applyTheme, storedTheme, type Theme } from '@/lib/theme'
 import type { ActionResult, EodReport, GameState, NoticeTone } from '../../electron/types'
 
 export type Screen =
@@ -28,6 +29,8 @@ interface GameStore {
   game: GameState | null
   eodReport: EodReport | null
   notices: ToastNotice[]
+  theme: Theme
+  toggleTheme: () => void
   setScreen: (screen: Screen) => void
   setGame: (game: GameState | null) => void
   setEodReport: (report: EodReport | null) => void
@@ -46,6 +49,13 @@ export const useGameStore = create<GameStore>((set) => ({
   game: null,
   eodReport: null,
   notices: [],
+  theme: storedTheme(),
+  toggleTheme: () =>
+    set((s) => {
+      const theme = s.theme === 'dark' ? 'light' : 'dark'
+      applyTheme(theme)
+      return { theme }
+    }),
   setScreen: (screen) => set({ screen }),
   setGame: (game) => set({ game }),
   setEodReport: (eodReport) => set({ eodReport }),

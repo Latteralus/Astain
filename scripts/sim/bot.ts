@@ -71,7 +71,7 @@ export function dailyCapacity(db: DbManager): { finishedBf: number; waste: numbe
     if (!spec || spec.kind !== 'station') continue
     const perDay = hourlyOutput(spec.maxBfPerHour, e.speed) * ((DAY_END_MINUTE - DAY_START_MINUTE) / 60)
     processed += perDay
-    finished += perDay * (1 - wastePercentage(spec.baseError, e.quality))
+    finished += perDay * (1 - wastePercentage(e.level, spec.wasteFactor))
   }
   return { finishedBf: Math.min(finished, rackBf), waste: processed > 0 ? 1 - finished / processed : 0.3 }
 }

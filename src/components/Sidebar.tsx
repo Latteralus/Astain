@@ -11,6 +11,7 @@ import {
   Users,
   Warehouse,
 } from 'lucide-react'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import { Button } from '@/components/ui/button'
 import { cn, formatMoney } from '@/lib/utils'
 import { runAction, useGameStore, type Screen } from '@/store/gameStore'
@@ -104,6 +105,7 @@ export function Sidebar({ game }: { game: GameState }) {
           <Button variant="ghost" size="sm" className="justify-start text-muted-foreground" onClick={exitToMenu}>
             <LogOut /> Exit to menu
           </Button>
+          <ThemeToggle label />
         </div>
       </div>
     </aside>

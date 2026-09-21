@@ -224,10 +224,9 @@ const NEW_GAME = {
     { label: 'Utilities', daily_amount: 60 },
     { label: 'Insurance', daily_amount: 40 },
   ],
+  // The yard comes with a brush bench and two racks, but no lumber and no staff: the first hire and the first
+  // order are the player's to make.
   equipment: ['brush_bench', 'drying_rack', 'drying_rack'] as EquipmentType[],
-  rawLumber: [{ species: 'pine' as Species, boardFeet: 1000 }],
-  // A starting hand, already at the brush bench (equipment id 1).
-  employee: { name: 'Dale Whitaker', speed: 45, quality: 50, daily_wage: 195, severance_multiplier: 12, station_id: 1 },
 }
 
 const DEFAULT_NEW_GAME: NewGameOptions = { companyName: 'AStain Co.', capitalization: 'bootstrapped' }
@@ -305,14 +304,6 @@ export class DbManager {
       const insertCost = this.sql('INSERT INTO fixed_costs (label, daily_amount) VALUES (?, ?)')
       for (const cost of NEW_GAME.fixedCosts) insertCost.run(cost.label, cost.daily_amount)
       for (const type of NEW_GAME.equipment) this.addEquipment(type, 1)
-      for (const lot of NEW_GAME.rawLumber) this.adjustInventory(lot.species, 'raw', lot.boardFeet)
-      const e = NEW_GAME.employee
-      this
-        .sql(
-          `INSERT INTO employees (name, speed, quality, daily_wage, severance_multiplier, hired_day, station_id)
-           VALUES (?, ?, ?, ?, ?, 1, ?)`,
-        )
-        .run(e.name, e.speed, e.quality, e.daily_wage, e.severance_multiplier, e.station_id)
       const insertMill = this.sql('INSERT INTO mill_relations (mill, reputation) VALUES (?, ?)')
       for (const [id, spec] of Object.entries(MILLS)) insertMill.run(id, spec.startingReputation)
     })

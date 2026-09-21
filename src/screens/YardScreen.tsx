@@ -13,7 +13,7 @@ import type { GameState } from '../../electron/types'
 
 function specLine(spec: EquipmentSpec) {
   return spec.kind === 'station'
-    ? `Up to ${formatBf(spec.maxBfPerHour)}/h · ${formatPct(spec.baseError)} base error`
+    ? `Up to ${formatBf(spec.maxBfPerHour)}/h · ${spec.wasteFactor === 1 ? 'full' : `${formatPct(spec.wasteFactor)} of the`} operator's waste`
     : `Holds ${formatBf(spec.capacityBf)} while drying`
 }
 

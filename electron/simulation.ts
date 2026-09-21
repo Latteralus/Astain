@@ -204,7 +204,7 @@ export function runProductionMinute(db: DbManager): void {
       continue
     }
     const ratePerMinute = hourlyOutput(spec.maxBfPerHour, e.speed) / 60
-    const waste = wastePercentage(spec.baseError, e.quality)
+    const waste = wastePercentage(e.level, spec.wasteFactor)
 
     const species = order.find((s) => (raw.get(s) ?? 0) > EPSILON)
     const stock = species ? raw.get(species)! : 0

@@ -22,24 +22,37 @@ export function hourlyOutput(equipMaxBfPerHour: number, workerSpeed: number): nu
   return equipMaxBfPerHour * (workerSpeed / 100)
 }
 
-/** Waste Percentage = Machine_Base_Error + (100 − Worker_Quality) / 200, as a 0–1 fraction. */
-export function wastePercentage(machineBaseError: number, workerQuality: number): number {
-  return Math.min(1, Math.max(0, machineBaseError + (100 - workerQuality) / 200))
+/** Waste for a level 1 worker, the most anyone ever ruins. No real finisher keeps their job wasting more. */
+export const MAX_WASTE = 0.1
+/** Waste at the mastery level, and the floor beyond it (before the machine's factor). */
+export const MASTERY_WASTE = 0.05
+export const MASTERY_LEVEL = 50
+
+/**
+ * Waste Percentage, as a 0–1 fraction. Experience sets it: 10% at level 1 falling in a straight line to 5% at
+ * level 50 (and staying there). The station then scales it down: a spray booth lays an even coat, a brush doesn't.
+ */
+export function wastePercentage(workerLevel: number, machineWasteFactor: number): number {
+  const progress = Math.min(1, Math.max(0, (workerLevel - 1) / (MASTERY_LEVEL - 1)))
+  return (MAX_WASTE - (MAX_WASTE - MASTERY_WASTE) * progress) * machineWasteFactor
 }
 
 // --- Worker progression --------------------------------------------------------------------------------
 
-/** XP is earned at 1 per in-game minute of productive work. */
-export const BASE_XP = 600
+/**
+ * XP is earned at 1 per in-game minute of productive work (720 in a full day). At 60, a full-time worker reaches
+ * level 10 in ~9 working days, level 25 in ~100 and level 50 in ~575.
+ */
+export const BASE_XP = 60
 
 /** XP_req = Base_XP × Level^1.5 — the XP needed to advance from `level` to `level + 1`. */
 export function xpRequired(level: number): number {
   return Math.round(BASE_XP * level ** 1.5)
 }
 
-/** Each level closes 12% of the gap to 100, so gains shrink as a worker approaches mastery. */
+/** Each level closes 5% of the gap to 100, so gains shrink as a worker approaches mastery. */
 export function statGainOnLevelUp(stat: number): number {
-  return stat >= 100 ? 0 : Math.max(1, Math.round((100 - stat) * 0.12))
+  return stat >= 100 ? 0 : Math.max(1, Math.round((100 - stat) * 0.05))
 }
 
 // --- Labor market --------------------------------------------------------------------------------------
@@ -102,7 +115,8 @@ interface EquipmentBase {
 export interface StationSpec extends EquipmentBase {
   kind: 'station'
   maxBfPerHour: number
-  baseError: number
+  /** Multiplies the operator's waste; below 1 means the machine wastes less than hand work. */
+  wasteFactor: number
 }
 
 export interface RackSpec extends EquipmentBase {
@@ -119,7 +133,7 @@ export const EQUIPMENT: Record<EquipmentType, EquipmentSpec> = {
     price: 1500,
     footprintSqFt: 80,
     maxBfPerHour: 60,
-    baseError: 0.08,
+    wasteFactor: 1,
     description: 'Hand-applied stain. Slow and forgiving on the budget, not on the wood.',
   },
   dip_tank: {
@@ -128,7 +142,7 @@ export const EQUIPMENT: Record<EquipmentType, EquipmentSpec> = {
     price: 7500,
     footprintSqFt: 200,
     maxBfPerHour: 180,
-    baseError: 0.05,
+    wasteFactor: 0.8,
     description: 'Bundles are dipped and hung. The workhorse of small yards.',
   },
   spray_booth: {
@@ -137,7 +151,7 @@ export const EQUIPMENT: Record<EquipmentType, EquipmentSpec> = {
     price: 22000,
     footprintSqFt: 450,
     maxBfPerHour: 400,
-    baseError: 0.02,
+    wasteFactor: 0.6,
     description: 'Enclosed conveyor sprayer. High volume, even coats.',
   },
   drying_rack: {
@@ -349,7 +363,7 @@ export const CONTRACT_KINDS: Record<ContractKind, ContractKindSpec> = {
     description: 'The customer drops off their own lumber; you stain it and hand back the same volume.',
     bundles: [1, 6],
     slackDays: [1, 2],
-    ratePerBf: [0.8, 1.1],
+    ratePerBf: [0.55, 0.8],
     penaltyRate: 0.5,
   },
   purchase: {
@@ -357,7 +371,7 @@ export const CONTRACT_KINDS: Record<ContractKind, ContractKindSpec> = {
     description: 'You source the lumber from a mill and sell it back stained. More capital, more margin.',
     bundles: [2, 10],
     slackDays: [2, 4],
-    ratePerBf: [1.05, 1.45],
+    ratePerBf: [0.85, 1.25],
     penaltyRate: 0.25,
   },
 }

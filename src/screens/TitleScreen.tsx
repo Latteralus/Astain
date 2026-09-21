@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Panel } from '@/components/Panel'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -174,9 +175,12 @@ export function TitleScreen() {
   return (
     <div className="h-screen overflow-y-auto">
       <div className="mx-auto max-w-4xl space-y-6 px-8 py-12">
-        <header>
-          <h1 className="text-3xl font-semibold">AStain</h1>
-          <p className="text-muted-foreground">Lumber staining &amp; logistics</p>
+        <header className="flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-semibold">AStain</h1>
+            <p className="text-muted-foreground">Lumber staining &amp; logistics</p>
+          </div>
+          <ThemeToggle />
         </header>
         {saves && saves.length > 0 && <SaveList saves={saves} onLoad={load} onDelete={setConfirmDelete} />}
         {saves && <NewCareer onStart={start} />}

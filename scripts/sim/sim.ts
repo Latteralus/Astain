@@ -44,11 +44,17 @@ interface Expectation {
   check: (runs: RunResult[]) => boolean
 }
 
-/** A modest first step: a dip tank for the starting hand and one more worker on the brush bench. */
+/** The bare minimum: one cheap hire for the brush bench the yard comes with. */
+function firstHire(ctx: BotContext) {
+  recruit(ctx, 'classifieds', 1)
+  staffStations(ctx)
+}
+
+/** A modest first step: a dip tank, one more rack, and two hires (dip tank and brush bench). */
 function modestExpansion(ctx: BotContext) {
   ctx.act((db) => actions.buyEquipment(db, 'dip_tank'))
   ctx.act((db) => actions.buyEquipment(db, 'drying_rack'))
-  recruit(ctx, 'classifieds', 1)
+  recruit(ctx, 'classifieds', 2)
   staffStations(ctx)
 }
 
@@ -57,7 +63,7 @@ function overExpansion(ctx: BotContext) {
   for (const type of ['dip_tank', 'dip_tank', 'drying_rack', 'drying_rack', 'drying_rack', 'drying_rack'] as const) {
     ctx.act((db) => actions.buyEquipment(db, type))
   }
-  recruit(ctx, 'trade_board', 3)
+  recruit(ctx, 'trade_board', 4)
   ctx.act((db) => actions.buyVehicle(db, 'pickup'))
   ctx.act((db) => actions.hireCrew(db, 'driver'))
   ctx.act((db) => actions.acquireProperty(db, 'gravel_lot', 'lease'))
@@ -79,9 +85,9 @@ const lullAfter = (day: number) => (d: number) => d < day
 const SCENARIOS: Scenario[] = [
   {
     name: 'idle',
-    description: 'Bootstrapped, never takes a contract. Pure fixed costs.',
+    description: 'Bootstrapped, hires nobody and never takes a contract. Pure fixed costs.',
     capitalization: 'bootstrapped',
-    days: 150,
+    days: 200,
     takeWork: () => false,
     expect: [
       { label: 'goes bankrupt', check: (runs) => runs.every((r) => r.bankruptDay !== null) },
@@ -93,9 +99,10 @@ const SCENARIOS: Scenario[] = [
   },
   {
     name: 'starter',
-    description: 'Bootstrapped, plays the starting yard as-is: one hand on the brush bench, takes what it can finish.',
+    description: 'Bootstrapped, one cheap hire on the brush bench the yard comes with, takes what it can finish.',
     capitalization: 'bootstrapped',
     days: 60,
+    setup: firstHire,
     takeWork: () => true,
     expect: [
       { label: 'survives 60 days', check: (runs) => runs.every((r) => r.bankruptDay === null) },
@@ -104,7 +111,7 @@ const SCENARIOS: Scenario[] = [
   },
   {
     name: 'steady',
-    description: 'Bootstrapped, buys a dip tank and hires one hand on day 1, then takes what it can finish.',
+    description: 'Bootstrapped, buys a dip tank and hires two hands on day 1, then takes what it can finish.',
     capitalization: 'bootstrapped',
     days: 60,
     setup: modestExpansion,
