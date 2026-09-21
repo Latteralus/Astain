@@ -1,0 +1,10 @@
+{
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+  "appId": "com.astain.simulator",
+  "productName": "AStain",
+  "directories": { "output": "release/${version}" },
+  "files": ["dist", "dist-electron"],
+  "asarUnpack": ["node_modules/better-sqlite3/**"],
+  "win": { "target": [{ "target": "nsis", "arch": ["x64"] }] },
+  "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true }
+}
