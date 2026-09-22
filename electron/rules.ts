@@ -160,9 +160,15 @@ export const EQUIPMENT: Record<EquipmentType, EquipmentSpec> = {
     price: 800,
     footprintSqFt: 60,
     capacityBf: 600,
-    description: 'Stained wood dries here overnight before it can be stacked.',
+    description: 'Stained wood dries here for a few hours before it can be stacked.',
   },
 }
+
+/** How long stained wood sits on a rack before it can be stacked as finished stock, in minutes. */
+export const DRYING_MINUTES = 180
+
+/** Selling equipment returns this fraction of its list price. */
+export const EQUIPMENT_RESALE = 0.5
 
 // --- Clock ---------------------------------------------------------------------------------------------
 

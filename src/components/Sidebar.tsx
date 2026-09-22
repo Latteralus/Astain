@@ -1,7 +1,7 @@
 import {
   BookOpen,
   ClipboardList,
-  Copy,
+  Save,
   LandPlot,
   LayoutDashboard,
   LogOut,
@@ -93,14 +93,12 @@ export function Sidebar({ game }: { game: GameState }) {
             variant="ghost"
             size="sm"
             className="justify-start text-muted-foreground"
-            title="Keep a checkpoint of the game as it is now. You carry on playing this one."
+            title="The game also saves itself as you play."
             onClick={async () => {
-              if (await runAction(() => window.api.saveCopy())) {
-                pushNotice('info', `Saved a copy of ${game.companyName} on day ${game.day}. You're still playing the original.`)
-              }
+              if (await runAction(() => window.api.saveGame())) pushNotice('info', `${game.companyName} saved.`)
             }}
           >
-            <Copy /> Save a copy
+            <Save /> Save Game
           </Button>
           <Button variant="ghost" size="sm" className="justify-start text-muted-foreground" onClick={exitToMenu}>
             <LogOut /> Exit to menu

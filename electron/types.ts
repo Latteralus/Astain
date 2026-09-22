@@ -24,6 +24,15 @@ export interface InventoryItem {
   boardFeet: number
 }
 
+/** Stained wood on the racks that will be dry at (readyDay, readyMinute). */
+export interface DryingBatch {
+  species: Species
+  boardFeet: number
+  readyDay: number
+  /** Can run past 8:00 PM; wood still racked at closing dries overnight. */
+  readyMinute: number
+}
+
 export interface EquipmentItem {
   id: number
   type: EquipmentType
@@ -261,6 +270,8 @@ export interface GameState {
   bankrupt: boolean
   space: SpaceSummary
   inventory: InventoryItem[]
+  /** What's on the racks and when each lot will be dry. */
+  drying: DryingBatch[]
   equipment: EquipmentItem[]
   employees: Employee[]
   candidates: Candidate[]
@@ -302,7 +313,7 @@ export interface EodReport {
   /** Consecutive nights in the red, this one included; 0 if the day closed with cash in hand. */
   insolventNights: number
   production: ProductionTotals & {
-    /** Moved from the racks to finished stock overnight. */
+    /** Moved from the racks to finished stock today, during the day and overnight. */
     driedBf: number
     /** Left on the racks because the floor had no room to stack it. */
     stuckOnRacksBf: number
@@ -345,6 +356,8 @@ export interface GameApi {
   deleteSave: (saveId: string) => Promise<ActionResult>
   /** Copies the loaded game into a new save file, as a checkpoint to come back to. Play continues in the original. */
   saveCopy: () => Promise<ActionResult>
+  /** Makes sure everything played so far is written to the save file. */
+  saveGame: () => Promise<ActionResult>
   /** Closes the loaded game (it's already saved) and returns to the title menu. */
   exitToMenu: () => Promise<void>
   /** The loaded game's state, or null on the title menu. */
@@ -357,6 +370,8 @@ export interface GameApi {
   resume: () => Promise<GameState>
   startNextDay: () => Promise<GameState>
   buyEquipment: (type: EquipmentType) => Promise<ActionResult>
+  /** Sells a station or rack for half its list price. */
+  sellEquipment: (equipmentId: number) => Promise<ActionResult>
   assignStation: (employeeId: number, equipmentId: number | null) => Promise<ActionResult>
   getMarketHistory: () => Promise<{ prices: MarketHistoryPoint[]; news: MarketNews[] }>
   /** Resolved contracts, newest first. */

@@ -25,7 +25,7 @@ export function InventoryScreen({ game }: { game: GameState }) {
   return (
     <div className="space-y-6">
       <div className="grid gap-6 xl:grid-cols-[3fr_2fr]">
-        <Panel title="Stock" description="Raw and finished lumber sit on the floor. Stained wood dries on the racks overnight.">
+        <Panel title="Stock" description="Raw and finished lumber sit on the floor. Stained wood dries on the racks for a few hours before it's stacked as finished.">
           <Table>
             <TableHeader>
               <TableRow>

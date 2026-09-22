@@ -18,6 +18,7 @@ import type {
   Candidate,
   Contract,
   ContractStatus,
+  DryingBatch,
   Delivery,
   DeliveryKind,
   DeliveryStatus,
@@ -41,7 +42,7 @@ import type {
  * Bump whenever schema.sql changes shape, and add a MIGRATIONS entry that upgrades the previous version's tables.
  * New tables need no migration: schema.sql creates them. Only changes to existing tables do (ALTER TABLE).
  */
-export const SCHEMA_VERSION = 6
+export const SCHEMA_VERSION = 7
 
 /** SQL that upgrades a save from version N to N + 1, keyed by N. Saves older than the first key can't be upgraded. */
 const MIGRATIONS: Record<number, string> = {
@@ -53,6 +54,9 @@ const MIGRATIONS: Record<number, string> = {
     ALTER TABLE company ADD COLUMN bankrupt_day INTEGER;
     ALTER TABLE daily_reports ADD COLUMN insolvent_nights INTEGER NOT NULL DEFAULT 0;
   `,
+  // v7 only adds tables (drying_batches, daily_drying), which schema.sql creates. Wood already on the racks gets a
+  // batch from reconcileDrying() when the save is opened.
+  6: '',
 }
 
 /** Whether a save written with schema `version` can be opened by this build, upgrading it if needed. */
@@ -307,6 +311,22 @@ export class DbManager {
       const insertMill = this.sql('INSERT INTO mill_relations (mill, reputation) VALUES (?, ?)')
       for (const [id, spec] of Object.entries(MILLS)) insertMill.run(id, spec.startingReputation)
     })
+    this.reconcileDrying()
+  }
+
+  /**
+   * Keeps the drying batches in step with the 'drying' inventory total. Wood racked before batches existed (older
+   * saves) gets a batch that is ready now.
+   */
+  private reconcileDrying(): void {
+    this.transaction(() => {
+      const { day, minute } = this.getCompany()
+      for (const item of this.getInventory()) {
+        if (item.state !== 'drying') continue
+        const batched = this.getDryingBatches().filter((b) => b.species === item.species).reduce((s, b) => s + b.boardFeet, 0)
+        if (item.boardFeet - batched > 1e-6) this.addDryingBatch(item.species, item.boardFeet - batched, day, minute)
+      }
+    })
   }
 
   /** Runs `fn` atomically. Nested calls join the outer transaction. */
@@ -395,12 +415,59 @@ export class DbManager {
       .run({ species, state, delta: deltaBf })
   }
 
+  // --- Drying ------------------------------------------------------------------------------------------
+
+  /** Racked wood by the moment it will be dry, earliest first. */
+  getDryingBatches(): DryingBatch[] {
+    return this.sql(
+      `SELECT species, board_feet AS boardFeet, ready_day AS readyDay, ready_minute AS readyMinute FROM drying_batches
+       WHERE board_feet > 0.0001 ORDER BY ready_day, ready_minute, species`,
+    ).all() as DryingBatch[]
+  }
+
+  addDryingBatch(species: Species, boardFeet: number, readyDay: number, readyMinute: number): void {
+    this.sql(
+      `INSERT INTO drying_batches (species, board_feet, ready_day, ready_minute) VALUES (@species, @bf, @day, @minute)
+       ON CONFLICT (species, ready_day, ready_minute) DO UPDATE SET board_feet = board_feet + excluded.board_feet`,
+    ).run({ species, bf: boardFeet, day: readyDay, minute: readyMinute })
+  }
+
+  /** Takes `boardFeet` off one batch, deleting it once empty. */
+  takeFromDryingBatch(b: DryingBatch, boardFeet: number): void {
+    this.sql(
+      `UPDATE drying_batches SET board_feet = MAX(0, board_feet - @bf)
+       WHERE species = @species AND ready_day = @day AND ready_minute = @minute`,
+    ).run({ bf: boardFeet, species: b.species, day: b.readyDay, minute: b.readyMinute })
+    this.sql('DELETE FROM drying_batches WHERE board_feet <= 0.0001').run()
+  }
+
+  logDried(day: number, boardFeet: number): void {
+    this.sql(
+      `INSERT INTO daily_drying (day, dried_bf) VALUES (?, ?)
+       ON CONFLICT (day) DO UPDATE SET dried_bf = dried_bf + excluded.dried_bf`,
+    ).run(day, boardFeet)
+  }
+
+  getDriedToday(day: number): number {
+    return (this.sql('SELECT dried_bf FROM daily_drying WHERE day = ?').get(day) as { dried_bf: number } | undefined)?.dried_bf ?? 0
+  }
+
   // --- Equipment ---------------------------------------------------------------------------------------
 
   getEquipment(): EquipmentItem[] {
     return this
       .sql('SELECT id, type, purchased_day AS purchasedDay FROM equipment ORDER BY id')
       .all() as EquipmentItem[]
+  }
+
+  /** Removes a piece of equipment for good (it was sold). Its operator must already be off it. */
+  removeEquipment(id: number): void {
+    this.sql('DELETE FROM equipment WHERE id = ?').run(id)
+  }
+
+  /** Forces everything written so far into the main save file, so nothing depends on the write-ahead log. */
+  checkpoint(): void {
+    this.db.pragma('wal_checkpoint(TRUNCATE)')
   }
 
   addEquipment(type: EquipmentType, day: number): number {

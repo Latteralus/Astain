@@ -1,7 +1,7 @@
 import type { DbManager } from './database/dbManager'
 import { processTrips } from './fleet'
 import { openDay, processDeliveries } from './market'
-import { closeDay, runProductionMinute, snapshot } from './simulation'
+import { closeDay, dryRacks, runProductionMinute, snapshot } from './simulation'
 import {
   DAY_END_MINUTE,
   DAY_START_MINUTE,
@@ -88,7 +88,7 @@ export class GameEngine {
 
   /**
    * Works one in-game minute and advances the clock, closing the day when it reaches 8:00 PM. Trucks move and
-   * unload first, so lumber that arrives this minute can be worked this minute.
+   * unload first, so lumber that arrives this minute can be worked this minute; then dry wood leaves the racks.
    */
   advance(): void {
     if (this.phase !== 'running') return
@@ -96,6 +96,8 @@ export class GameEngine {
     const next = minute + 1
     const notices = this.db.transaction(() => {
       const arrived = [...processDeliveries(this.db), ...processTrips(this.db)]
+      // Dry wood comes off the racks before the crew works, so the freed rack space is usable this minute.
+      dryRacks(this.db)
       runProductionMinute(this.db)
       if (next < DAY_END_MINUTE) this.db.setClock(day, next)
       return arrived

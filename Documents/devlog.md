@@ -44,7 +44,7 @@ Circular imports exist (`simulation` ↔ `market`, `simulation` ↔ `fleet`). Th
 - **Schema changes:** bump `SCHEMA_VERSION` in `dbManager.ts` **and** add a `MIGRATIONS[oldVersion]` entry with the `ALTER TABLE`s that upgrade the previous version. New tables need no migration, because `schema.sql` creates them with `IF NOT EXISTS`. Only changes to existing tables do. Also add any new `company` column to the `NEW_GAME` insert if it needs a non-default value.
   - On open, a save that's behind gets a `<id>.db.v<N>.bak` copy and is then upgraded in place.
   - A save that can't be upgraded (older than v5, or from a newer build) is listed as "Can't open". If something opens it directly, it's set aside as `.bak` and a new game starts.
-  - The current version is **6**. v5 is the oldest version that can be upgraded.
+  - The current version is **7**. v5 is the oldest version that can be upgraded. `MIGRATIONS[6]` is empty: v7 only added tables.
 - **Solvency:** `closeDay` counts consecutive nights ending with cash < 0 (`company.insolvent_nights`, also stored on each `daily_reports` row). At `INSOLVENCY_GRACE_NIGHTS` (3), `bankrupt_day` is set. After that `startNextDay` does nothing and `act` refuses everything. A bankrupt save reopens on its final EOD screen.
 - **Time:** all trip and delivery timing is in *working minutes*, so trucks don't move overnight. Use `addWorkingMinutes`, `workingMinutesBetween` and `isReached` from `rules.ts`. Store moments as `(day, minute)` pairs.
 - **Money:** always go through `db.postTransaction(amount, memo, category)`. The category (`operating` / `capital` / `overnight`) feeds the EOD report. Overnight charges have to be posted inside `closeDay`'s transaction.
@@ -80,6 +80,31 @@ Circular imports exist (`simulation` ↔ `market`, `simulation` ↔ `fleet`). Th
 ---
 
 ## Log
+
+### 2026-09-21: Active drying, contract progress, selling equipment, Save Game
+
+- **Racks dry in 3 hours now, not overnight** (`DRYING_MINUTES = 180`).
+  - Stained wood goes into `drying_batches` (schema v7) with a ready time rounded up to a 15-minute slot, so it takes 3h to 3h15m. Per-minute rows made the sim 4× slower.
+  - `dryRacks()` runs every minute in `advance()`, before production, so freed rack space is used the same minute. It moves ready batches to finished stock as far as floor space allows, and exits early when nothing is ready.
+  - At 8 PM `closeDay` calls `dryRacks(db, true)`: everything left dries overnight, and anything with no floor room is still reported as stuck.
+  - The `'drying'` inventory row stays as the total; batches are the detail. `DbManager.reconcileDrying()` gives any unbatched racked wood (older saves) a ready-now batch on open.
+  - `daily_drying` records drying for the day, and the EOD line now reads "Dried and stacked".
+  - Balance impact: racks now turn over about 4× a day, so rack capacity rarely limits output and stations do. Steady revenue went from $2,570 to $3,020 a day. All 10 sim scenarios still pass: steady $77k, over-hire + lull bankrupt on day 11, busy $112k.
+- **Contract progress bar** (Contracts → Active) shows the stage the order is at:
+  - Customer's lumber on the way: truck progress, with the ETA in the text.
+  - Being worked: finished stock as the solid part, and wood on the racks as a lighter second segment.
+  - Shipping: the outbound trip's progress.
+  - `contractCoverage()` in `src/lib/game.ts` shares pooled stock out earliest-deadline first, so two orders for the same species don't both claim the same wood.
+- **Sell equipment** (Yard → Owned equipment, `sellEquipment`): 50% of list price (`EQUIPMENT_RESALE`), posted as capital.
+  - A station's operator is unassigned first.
+  - A rack is refused if the wood drying would no longer fit on the remaining racks.
+  - The starting brush bench and racks can be sold too.
+- **"Save Game"** replaced "Save a copy" in the sidebar. It calls `db.checkpoint()` (`wal_checkpoint(TRUNCATE)`) and shows "<company> saved."
+  - Play was already written continuously; this makes the `.db` file complete on its own.
+  - The copy feature (`saves:copy` / `saveCopy`) still exists in the backend but no longer has a button. Re-add it as "Save as…" if wanted.
+- Checked:
+  - A scratch script with 14 checks: mid-day drying, overnight completion, report totals, sell rules, checkpoint, and the v6 → v7 upgrade with racked wood.
+  - In the real app: the toll bar went from 28% to 42% as the truck approached, the sell buttons read $750/$400/$400, and Save Game showed its notice.
 
 ### 2026-09-21: Waste capped at 10%, set by level
 

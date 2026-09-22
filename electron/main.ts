@@ -108,6 +108,12 @@ function registerSaveIpc() {
     const { db } = session
     return trySave('save a copy', () => void saves.copy(db))
   })
+  // Play is written to SQLite as it happens; this folds the write-ahead log into the save file so it's complete on its own.
+  ipcMain.handle('saves:save', (): ActionResult => {
+    if (!session) return NO_GAME
+    const { db } = session
+    return trySave('save the game', () => db.checkpoint())
+  })
   ipcMain.handle('saves:exit', () => closeSession())
 }
 
@@ -120,6 +126,7 @@ function registerGameIpc() {
   ipcMain.handle('game:getLedger', () => requireSession().db.getLedger())
   ipcMain.handle('game:getReportHistory', () => requireSession().db.getReportHistory())
   ipcMain.handle('game:buyEquipment', (_e, type) => act((db) => actions.buyEquipment(db, type)))
+  ipcMain.handle('game:sellEquipment', (_e, id) => act((db) => actions.sellEquipment(db, id)))
   ipcMain.handle('game:assignStation', (_e, employeeId, equipmentId) =>
     act((db) => actions.assignStation(db, employeeId, equipmentId)),
   )

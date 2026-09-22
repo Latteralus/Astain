@@ -8,6 +8,7 @@ import {
   CREW_ROLES,
   dailyWage,
   EQUIPMENT,
+  EQUIPMENT_RESALE,
   FORKLIFT_COVERAGE_SQFT,
   JOB_POSTINGS,
   LEASE_SIGNING_DAYS,
@@ -64,6 +65,32 @@ export function buyEquipment(db: DbManager, type: EquipmentType): ActionResult {
   }
   db.postTransaction(-spec.price, `Purchased ${spec.name.toLowerCase()}`, 'capital')
   db.addEquipment(type, db.getCompany().day)
+  return OK
+}
+
+/**
+ * Sells a station or rack for half its list price. A station's operator is left unassigned; a rack can only go if
+ * the wood drying on the racks still fits on the ones that are left.
+ */
+export function sellEquipment(db: DbManager, equipmentId: number): ActionResult {
+  const item = db.getEquipment().find((e) => e.id === equipmentId)
+  if (!item) return fail('That equipment is no longer in the yard.')
+  const spec = EQUIPMENT[item.type]
+  if (spec.kind === 'rack') {
+    const { rackUsedBf, rackCapacityBf } = spaceSummary(db)
+    const left = rackCapacityBf - spec.capacityBf
+    if (rackUsedBf > left + 1e-6) {
+      return fail(`Can't sell a drying rack while ${bf(rackUsedBf)} is drying: the other racks only hold ${bf(left)}. Wait for it to dry.`)
+    }
+  } else {
+    const operator = db.getOperator(item.id)
+    if (operator) {
+      db.setStation(operator.id, null)
+      db.setStatus(operator.id, 'unassigned')
+    }
+  }
+  db.postTransaction(Math.round(spec.price * EQUIPMENT_RESALE), `Sold ${spec.name.toLowerCase()}`, 'capital')
+  db.removeEquipment(item.id)
   return OK
 }
 

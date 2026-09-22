@@ -108,7 +108,7 @@ export function EndOfDayDialog({
               <dd className="text-right">{formatBf(p.stainedBf)}</dd>
               <dt>Ruined</dt>
               <dd className={cn('text-right', p.wastedBf > 0 && 'text-destructive')}>{formatBf(p.wastedBf)}</dd>
-              <dt>Dried and stacked overnight</dt>
+              <dt>Dried and stacked</dt>
               <dd className="text-right">{formatBf(p.driedBf)}</dd>
               {p.stuckOnRacksBf > 0 && (
                 <>

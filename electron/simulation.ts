@@ -4,7 +4,9 @@ import { millStates, settleMarketDay } from './market'
 import {
   availableStorage,
   BF_PER_SQFT,
+  DRYING_MINUTES,
   EQUIPMENT,
+  isReached,
   floorSqFt,
   FORKLIFT_COVERAGE_SQFT,
   INSOLVENCY_GRACE_NIGHTS,
@@ -28,6 +30,7 @@ import {
 } from './types'
 
 const EPSILON = 1e-6
+const DRYING_SLOT_MINUTES = 15
 
 export function spaceSummary(db: DbManager): SpaceSummary {
   let equipmentSqFt = 0
@@ -130,6 +133,7 @@ export function snapshot(db: DbManager, phase: GamePhase): GameState {
     bankrupt: c.bankrupt_day !== null,
     space: spaceSummary(db),
     inventory: db.getInventory(),
+    drying: db.getDryingBatches(),
     equipment: db.getEquipment(),
     employees: db.getEmployees().map(toEmployee),
     candidates: db.getCandidates(),
@@ -222,6 +226,9 @@ export function runProductionMinute(db: DbManager): void {
     rackFreeBf -= stained
     db.adjustInventory(species, 'raw', -processed)
     db.adjustInventory(species, 'drying', stained)
+    // Batches share 15-minute ready slots, so the racks hold a dozen rows rather than one per minute.
+    const readyMinute = Math.ceil((db.getCompany().minute + DRYING_MINUTES) / DRYING_SLOT_MINUTES) * DRYING_SLOT_MINUTES
+    db.addDryingBatch(species, stained, day, readyMinute)
     db.logProduction(day, e.id, stained, processed - stained)
     grantXp(db, e, processed / ratePerMinute)
     if (e.status !== 'working') db.setStatus(e.id, 'working')
@@ -229,8 +236,37 @@ export function runProductionMinute(db: DbManager): void {
 }
 
 /**
+ * Moves dry wood off the racks and onto the floor as finished stock, oldest batch first, as far as floor space allows.
+ * During the day only batches whose drying time is up move; overnight (`everything`) all of it has time to dry.
+ * Wood with nowhere to go stays on its rack, and so keeps that rack space tied up.
+ */
+export function dryRacks(db: DbManager, everything = false): { driedBf: number; stuckBf: number } {
+  const { day, minute } = db.getCompany()
+  // Runs every minute, so skip the space calculation when nothing is ready yet.
+  const ready = db.getDryingBatches().filter((b) => everything || isReached(b.readyDay, b.readyMinute, day, minute))
+  if (ready.length === 0) return { driedBf: 0, stuckBf: 0 }
+  let floorRoomBf = Math.max(0, spaceSummary(db).freeSqFt * BF_PER_SQFT)
+  let driedBf = 0
+  let stuckBf = 0
+  for (const batch of ready) {
+    const moved = Math.min(batch.boardFeet, floorRoomBf)
+    if (moved > 0) {
+      db.takeFromDryingBatch(batch, moved)
+      db.adjustInventory(batch.species, 'drying', -moved)
+      db.adjustInventory(batch.species, 'finished', moved)
+      floorRoomBf -= moved
+      driedBf += moved
+    }
+    stuckBf += batch.boardFeet - moved
+  }
+  if (driedBf > 0) db.logDried(day, driedBf)
+  return { driedBf, stuckBf }
+}
+
+/**
  * Closes the current day at 8:00 PM: pays wages and overnight costs (crew, fleet insurance, property and the loan
- * included), penalizes missed contract deadlines, counts nights in the red toward bankruptcy, dries racked wood into finished stock, expires stale job applicants and offers,
+ * included), penalizes missed contract deadlines, counts nights in the red toward bankruptcy, dries whatever is still racked,
+ * expires stale job applicants and offers,
  * and records the daily report. Runs as one transaction so a crash can never leave a day half-closed. Safe to call
  * twice for the same day.
  */
@@ -257,19 +293,8 @@ export function closeDay(db: DbManager): EodReport {
     }
     settleMarketDay(db, company.day)
 
-    // Dried wood moves off the racks onto the floor, as far as floor space allows.
-    let floorRoomBf = Math.max(0, spaceSummary(db).freeSqFt * BF_PER_SQFT)
-    let driedBf = 0
-    let stuckOnRacksBf = 0
-    for (const item of db.getInventory()) {
-      if (item.state !== 'drying') continue
-      const moved = Math.min(item.boardFeet, floorRoomBf)
-      db.adjustInventory(item.species, 'drying', -moved)
-      db.adjustInventory(item.species, 'finished', moved)
-      floorRoomBf -= moved
-      driedBf += moved
-      stuckOnRacksBf += item.boardFeet - moved
-    }
+    // Whatever is still racked has all night to dry, and moves onto the floor as far as there's room.
+    const { stuckBf: stuckOnRacksBf } = dryRacks(db, true)
 
     db.expireCandidates(company.day + 1)
     db.setAllStatuses('off_shift')
@@ -291,7 +316,7 @@ export function closeDay(db: DbManager): EodReport {
       ending_cash: endingCash,
       stained_bf: production.stainedBf,
       wasted_bf: production.wastedBf,
-      dried_bf: driedBf,
+      dried_bf: db.getDriedToday(company.day),
       stuck_on_racks_bf: stuckOnRacksBf,
       insolvent_nights: insolventNights,
     })

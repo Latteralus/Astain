@@ -10,6 +10,7 @@ import {
   floorSqFt,
   DAY_END_MINUTE,
   DAY_START_MINUTE,
+  DRYING_MINUTES,
   EQUIPMENT,
   hourlyOutput,
   LUMBER_BUNDLE_BF,
@@ -59,7 +60,8 @@ export function staffStations(ctx: BotContext): void {
   })
 }
 
-/** Finished board feet a day the yard can turn out: station output after waste, capped by what the racks can dry. */
+/** Finished board feet a day the yard can turn out: station output after waste, capped by what the racks can dry
+ * (each rack turns over once per drying time). */
 export function dailyCapacity(db: DbManager): { finishedBf: number; waste: number } {
   const equipment = new Map(db.getEquipment().map((e) => [e.id, EQUIPMENT[e.type]]))
   let processed = 0
@@ -73,7 +75,8 @@ export function dailyCapacity(db: DbManager): { finishedBf: number; waste: numbe
     processed += perDay
     finished += perDay * (1 - wastePercentage(e.level, spec.wasteFactor))
   }
-  return { finishedBf: Math.min(finished, rackBf), waste: processed > 0 ? 1 - finished / processed : 0.3 }
+  const rackTurns = (DAY_END_MINUTE - DAY_START_MINUTE) / DRYING_MINUTES
+  return { finishedBf: Math.min(finished, rackBf * rackTurns), waste: processed > 0 ? 1 - finished / processed : 0.3 }
 }
 
 export interface OperatorOptions {

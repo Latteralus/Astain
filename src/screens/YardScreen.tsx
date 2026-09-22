@@ -1,4 +1,4 @@
-import { ShoppingCart } from 'lucide-react'
+import { BadgeDollarSign, ShoppingCart } from 'lucide-react'
 import { NativeSelect } from '@/components/NativeSelect'
 import { Panel } from '@/components/Panel'
 import { SpaceBar } from '@/components/SpaceBar'
@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { equipmentLabel } from '@/lib/game'
 import { formatBf, formatMoneyWhole, formatPct, formatSqFt } from '@/lib/utils'
 import { runAction } from '@/store/gameStore'
-import { EQUIPMENT, type EquipmentSpec, type EquipmentType } from '../../electron/rules'
+import { EQUIPMENT, EQUIPMENT_RESALE, type EquipmentSpec, type EquipmentType } from '../../electron/rules'
 import type { GameState } from '../../electron/types'
 
 function specLine(spec: EquipmentSpec) {
@@ -67,6 +67,7 @@ export function YardScreen({ game }: { game: GameState }) {
               <TableHead className="text-right">Footprint</TableHead>
               <TableHead className="text-right">Bought</TableHead>
               <TableHead>Operator</TableHead>
+              <TableHead />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -100,6 +101,16 @@ export function YardScreen({ game }: { game: GameState }) {
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      title={operator ? `${operator.name} will be taken off it` : undefined}
+                      onClick={() => runAction(() => window.api.sellEquipment(item.id))}
+                    >
+                      <BadgeDollarSign /> Sell {formatMoneyWhole(spec.price * EQUIPMENT_RESALE)}
+                    </Button>
                   </TableCell>
                 </TableRow>
               )

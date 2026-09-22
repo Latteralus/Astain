@@ -5,14 +5,16 @@ import { Panel } from '@/components/Panel'
 import { StatCard } from '@/components/StatCard'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Progress } from '@/components/ui/progress'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import {
   cheapestMill,
+  contractCoverage,
   driverFree,
   dueLabel,
+  etaLabel,
+  outboundProgress,
   projectedFreeSqFt,
-  stock,
+  transitProgress,
   tripPlan,
   vehicleCapacityBf,
   vehicleLabel,
@@ -136,18 +138,52 @@ function OffersPanel({ game }: { game: GameState }) {
   )
 }
 
-function activeStatus(game: GameState, c: Contract): { text: string; ready: boolean } {
+interface ActiveStatus {
+  text: string
+  ready: boolean
+  /** Solid part of the bar, 0–100: truck progress, or finished stock. */
+  done: number
+  /** Lighter part after it, 0–100: wood still drying on the racks. */
+  pending: number
+}
+
+/** Where an order stands, and what its progress bar shows at that stage. */
+function activeStatus(game: GameState, c: Contract, coverage: ReturnType<typeof contractCoverage>): ActiveStatus {
   if (c.status === 'shipping') {
     const trip = game.trips.find((t) => t.contractId === c.id && t.status === 'outbound')
-    return { text: trip ? `On your truck, arriving ${whenLabel(game, trip.legEndsDay, trip.legEndsMinute)}` : 'On your truck', ready: false }
+    return {
+      text: trip ? `On your truck, arriving ${whenLabel(game, trip.legEndsDay, trip.legEndsMinute)}` : 'On your truck',
+      ready: false,
+      done: trip ? outboundProgress(game, trip) : 100,
+      pending: 0,
+    }
   }
   if (c.kind === 'toll' && !c.materialReceived) {
     const truck = game.deliveries.find((d) => d.contractId === c.id && d.status === 'in_transit')
-    return { text: truck ? "Customer's lumber on the way" : "Waiting on customer's lumber", ready: false }
+    return truck
+      ? { text: `Customer's lumber on the way, arriving ${etaLabel(game, truck)}`, ready: false, done: transitProgress(game, truck), pending: 0 }
+      : { text: "Waiting on customer's lumber", ready: false, done: 0, pending: 0 }
   }
-  const short = c.boardFeet - stock(game, 'finished', c.species)
-  if (short <= 0) return { text: 'Ready to deliver', ready: true }
-  return { text: `${formatBf(short)} more finished ${SPECIES[c.species].name.toLowerCase()} needed`, ready: false }
+  const { finishedBf, dryingBf } = coverage.get(c.id) ?? { finishedBf: 0, dryingBf: 0 }
+  const done = (finishedBf / c.boardFeet) * 100
+  const pending = (dryingBf / c.boardFeet) * 100
+  if (finishedBf + 1e-6 >= c.boardFeet) return { text: 'Ready to deliver', ready: true, done: 100, pending: 0 }
+  const short = c.boardFeet - finishedBf - dryingBf
+  const name = SPECIES[c.species].name.toLowerCase()
+  const parts = [`${formatBf(finishedBf)} finished`]
+  if (dryingBf > 0) parts.push(`${formatBf(dryingBf)} drying`)
+  if (short > 1e-6) parts.push(`${formatBf(short)} ${name} to stain`)
+  return { text: parts.join(' · '), ready: false, done, pending }
+}
+
+/** A progress bar with an optional second, lighter segment for work that's under way but not done. */
+function StageBar({ done, pending }: { done: number; pending: number }) {
+  return (
+    <div className="relative flex h-1.5 w-full overflow-hidden rounded-full bg-primary/20" role="progressbar" aria-valuenow={Math.round(done)}>
+      <div className="h-full bg-primary transition-all" style={{ width: `${Math.min(100, done)}%` }} />
+      <div className="h-full bg-primary/45 transition-all" style={{ width: `${Math.min(100 - Math.min(100, done), pending)}%` }} />
+    </div>
+  )
 }
 
 /** Picks one of your trucks to deliver the order, for the customer's freight allowance. */
@@ -205,6 +241,7 @@ function ShipControl({ game, contract, ready }: { game: GameState; contract: Con
 
 function ActivePanel({ game }: { game: GameState }) {
   const active = game.contracts.filter((c) => c.status === 'active' || c.status === 'shipping')
+  const coverage = contractCoverage(game)
 
   return (
     <Panel
@@ -217,7 +254,7 @@ function ActivePanel({ game }: { game: GameState }) {
             <TableHead>Customer</TableHead>
             <TableHead>Type</TableHead>
             <TableHead>Order</TableHead>
-            <TableHead className="w-56">Finished stock</TableHead>
+            <TableHead className="w-64">Progress</TableHead>
             <TableHead>Deadline</TableHead>
             <TableHead className="text-right">Payout</TableHead>
             <TableHead className="text-right">Penalty</TableHead>
@@ -233,9 +270,8 @@ function ActivePanel({ game }: { game: GameState }) {
             </TableRow>
           )}
           {active.map((c) => {
-            const status = activeStatus(game, c)
+            const status = activeStatus(game, c, coverage)
             const shipping = c.status === 'shipping'
-            const have = shipping ? c.boardFeet : Math.min(c.boardFeet, stock(game, 'finished', c.species))
             const dueToday = c.dueDay === game.day && !shipping
             return (
               <TableRow key={c.id}>
@@ -249,7 +285,7 @@ function ActivePanel({ game }: { game: GameState }) {
                 <TableCell>
                   <div className="space-y-1">
                     <div className="text-xs text-muted-foreground">{status.text}</div>
-                    <Progress value={(have / c.boardFeet) * 100} className="h-1.5" />
+                    <StageBar done={status.done} pending={status.pending} />
                   </div>
                 </TableCell>
                 <TableCell className={cn('tabular-nums', dueToday && 'font-medium text-destructive')}>

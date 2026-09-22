@@ -63,6 +63,21 @@ CREATE TABLE IF NOT EXISTS inventory (
   PRIMARY KEY (species, state)
 );
 
+-- Stained wood on the racks, grouped by when it will be dry. The 'drying' inventory row is the total of these.
+CREATE TABLE IF NOT EXISTS drying_batches (
+  species      TEXT    NOT NULL,
+  board_feet   REAL    NOT NULL CHECK (board_feet >= 0),
+  ready_day    INTEGER NOT NULL,
+  ready_minute INTEGER NOT NULL,              -- may run past 8:00 PM; anything left dries overnight
+  PRIMARY KEY (species, ready_day, ready_minute)
+);
+
+-- Board feet moved from the racks to finished stock each day, daytime and overnight together.
+CREATE TABLE IF NOT EXISTS daily_drying (
+  day      INTEGER PRIMARY KEY,
+  dried_bf REAL    NOT NULL DEFAULT 0
+);
+
 -- Per-worker daily output; feeds the End-of-Day report and later balancing runs.
 CREATE TABLE IF NOT EXISTS production_log (
   day         INTEGER NOT NULL,

@@ -105,6 +105,40 @@ export function transitProgress(game: GameState, d: Delivery) {
   return total > 0 ? Math.min(100, (done / total) * 100) : 100
 }
 
+/**
+ * How much of each open order is covered, earliest deadline first: finished stock, then wood still on the racks.
+ * Orders for the same species share one pile, so a later order only gets what the earlier ones leave. A toll order
+ * whose lumber hasn't arrived yet claims nothing.
+ */
+export function contractCoverage(game: GameState): Map<number, { finishedBf: number; dryingBf: number }> {
+  const finished = new Map<Species, number>()
+  const drying = new Map<Species, number>()
+  for (const i of game.inventory) {
+    if (i.state === 'finished') finished.set(i.species, i.boardFeet)
+    if (i.state === 'drying') drying.set(i.species, i.boardFeet)
+  }
+  const coverage = new Map<number, { finishedBf: number; dryingBf: number }>()
+  const open = game.contracts
+    .filter((c) => c.status === 'active' && (c.kind === 'purchase' || c.materialReceived))
+    .sort((a, b) => (a.dueDay ?? 0) - (b.dueDay ?? 0) || a.id - b.id)
+  for (const c of open) {
+    const f = Math.min(c.boardFeet, finished.get(c.species) ?? 0)
+    const d = Math.min(c.boardFeet - f, drying.get(c.species) ?? 0)
+    finished.set(c.species, (finished.get(c.species) ?? 0) - f)
+    drying.set(c.species, (drying.get(c.species) ?? 0) - d)
+    coverage.set(c.id, { finishedBf: f, dryingBf: d })
+  }
+  return coverage
+}
+
+/** How far an outbound delivery trip is toward the customer, 0–100. */
+export function outboundProgress(game: GameState, t: Trip) {
+  if (t.status !== 'outbound') return 100
+  const total = workingMinutesBetween(t.departedDay, t.departedMinute, t.legEndsDay, t.legEndsMinute)
+  const done = workingMinutesBetween(t.departedDay, t.departedMinute, game.day, game.minute)
+  return total > 0 ? Math.min(100, (done / total) * 100) : 100
+}
+
 export function deliverySource(game: GameState, d: Delivery) {
   if (d.mill) return MILLS[d.mill].name
   return game.contracts.find((c) => c.id === d.contractId)?.customer ?? 'Customer drop-off'
